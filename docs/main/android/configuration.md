@@ -1,89 +1,184 @@
----
-title: Configuring Android
-sidebar_label: Configuration
-description: Configuring Android
-contributors:
-  - mlynch
-  - jcesarmobile
-slug: /android/configuration
----
+export default function MonsterDenEscapeGame() {
+  const React = window.React;
+  const { useState, useEffect, useRef } = React;
 
-# Configuring Android
+  const GAME_WIDTH = 900;
+  const GAME_HEIGHT = 500;
+  const PLAYER_SIZE = 40;
+  const MONSTER_SIZE = 55;
+  const DEN_WIDTH = 80;
 
-## Configuring `AndroidManifest.xml`
+  const [playerX, setPlayerX] = useState(80);
+  const [playerY, setPlayerY] = useState(GAME_HEIGHT / 2);
+  const [monsterX, setMonsterX] = useState(20);
+  const [monsterY, setMonsterY] = useState(GAME_HEIGHT / 2);
+  const [gameState, setGameState] = useState("start");
+  const [message, setMessage] = useState("Run to the den before the monster catches you!");
+  const keysRef = useRef({});
 
-Android apps manage permissions, device features, and other settings in the `AndroidManifest.xml` file, which is located at `android/app/src/main/AndroidManifest.xml`.
+  const resetGame = () => {
+    setPlayerX(80);
+    setPlayerY(GAME_HEIGHT / 2);
+    setMonsterX(20);
+    setMonsterY(GAME_HEIGHT / 2);
+    setGameState("playing");
+    setMessage("Escape to the den!");
+  };
 
-> `AndroidManifest.xml` may reference additional files such as `styles.xml` and `strings.xml` within the `android/app/src/main/res/values` directory via `@style` and `@string`. [Read more about Android Resources](https://developer.android.com/guide/topics/resources/available-resources).
+  useEffect(() => {
+    const down = (e) => {
+      keysRef.current[e.key.toLowerCase()] = true;
+    };
 
-This article covers the basic modifications you'll need to make to your app. Read the [Android Manifest docs](https://developer.android.com/guide/topics/manifest/manifest-intro.html) to learn a whole lot more.
+    const up = (e) => {
+      keysRef.current[e.key.toLowerCase()] = false;
+    };
 
-## Changing the Package ID
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
 
-To change your app's Package ID (aka **Application ID** for Android), edit `applicationId` at the top of `android/app/build.gradle`:
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+    };
+  }, []);
 
-```diff
-defaultConfig {
--       applicationId "com.capacitorjs.app"
-+       applicationId "com.mycompany.myapp"
-```
+  useEffect(() => {
+    if (gameState !== "playing") return;
 
-## Changing the App Name
+    const interval = setInterval(() => {
+      setPlayerX((prev) => {
+        let next = prev;
+        if (keysRef.current["d"] || keysRef.current["arrowright"]) next += 7;
+        if (keysRef.current["a"] || keysRef.current["arrowleft"]) next -= 7;
+        return Math.max(0, Math.min(GAME_WIDTH - PLAYER_SIZE, next));
+      });
 
-To change the name of your app, change the value for `app_name` in `strings.xml`:
+      setPlayerY((prev) => {
+        let next = prev;
+        if (keysRef.current["w"] || keysRef.current["arrowup"]) next -= 7;
+        if (keysRef.current["s"] || keysRef.current["arrowdown"]) next += 7;
+        return Math.max(0, Math.min(GAME_HEIGHT - PLAYER_SIZE, next));
+      });
 
-```xml
-<string name="app_name">MyApp</string>
-```
+      setMonsterX((prev) => prev + 2.8);
 
-It may make sense to change the activity name to match, especially if your app has a single activity:
+      setMonsterY((prev) => {
+        if (prev < playerY) return prev + 1.6;
+        if (prev > playerY) return prev - 1.6;
+        return prev;
+      });
+    }, 30);
 
-```xml
-<string name="title_activity_main">MyApp</string>
-```
+    return () => clearInterval(interval);
+  }, [gameState, playerY]);
 
-## Deeplinks (aka Android App Links)
+  useEffect(() => {
+    if (gameState !== "playing") return;
 
-> For a Deep Links guide, [see here](/main/guides/deep-links.md).
+    const playerCenterX = playerX + PLAYER_SIZE / 2;
+    const playerCenterY = playerY + PLAYER_SIZE / 2;
+    const monsterCenterX = monsterX + MONSTER_SIZE / 2;
+    const monsterCenterY = monsterY + MONSTER_SIZE / 2;
 
-To enable deeplinking through Android App Links, follow the official Android guide on [Adding Android App Links](https://developer.android.com/studio/write/app-link-indexing). Android Studio comes with a handy wizard for configuring App Links.
+    const distance = Math.hypot(playerCenterX - monsterCenterX, playerCenterY - monsterCenterY);
 
-Once configured, the [`getLaunchUrl()` method in the App API](/apis/app.md#getlaunchurl) will provide any URL the app was launched with, and the [`'appUrlOpen'` event](/apis/app.md#addlistenerpause-) will fire any time the app receives a new App Link deeplink.
+    if (distance < 45) {
+      setGameState("lost");
+      setMessage("The monster caught you!");
+    }
 
-## URL Schemes
+    if (playerX + PLAYER_SIZE >= GAME_WIDTH - DEN_WIDTH) {
+      setGameState("won");
+      setMessage("You reached the den safely!");
+    }
+  }, [playerX, playerY, monsterX, monsterY, gameState]);
 
-Your app can respond to custom URLs on launch, making it possible to handle deeplinks and app interactions.
+  return (
+    <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 font-sans">
+      <div className="text-center mb-6">
+        <h1 className="text-5xl font-black tracking-tight mb-2">Monster Den Escape</h1>
+        <p className="text-slate-300 text-lg">Use WASD or Arrow Keys to run toward the glowing den.</p>
+      </div>
 
-To change the URL, search for and modify this line in `strings.xml`. It's recommended to set this to the Package ID.
+      <div
+        className="relative overflow-hidden rounded-3xl border-4 border-slate-700 shadow-2xl"
+        style={{ width: GAME_WIDTH, height: GAME_HEIGHT }}
+      >
+        <div className="absolute inset-0 bg-gradient-to-r from-emerald-950 via-slate-900 to-stone-900" />
 
-```xml
-<string name="custom_url_scheme">com.capacitorjs.myapp</string>
-```
+        <div className="absolute inset-0 opacity-20">
+          {[...Array(25)].map((_, i) => (
+            <div
+              key={i}
+              className="absolute bg-white rounded-full"
+              style={{
+                width: Math.random() * 4 + 2,
+                height: Math.random() * 4 + 2,
+                left: Math.random() * GAME_WIDTH,
+                top: Math.random() * GAME_HEIGHT,
+              }}
+            />
+          ))}
+        </div>
 
-In this example, the app will respond to URLs with the `com.capacitorjs.myapp://` scheme.
+        <div
+          className="absolute right-0 top-0 h-full flex items-center justify-center"
+          style={{ width: DEN_WIDTH }}
+        >
+          <div className="w-24 h-36 bg-amber-700 rounded-t-full border-4 border-yellow-300 shadow-[0_0_40px_rgba(255,215,0,0.9)] flex items-center justify-center text-black font-bold text-lg">
+            DEN
+          </div>
+        </div>
 
-To get any custom URL the app may have launched with, see the Deeplinks section above.
+        <div
+          className="absolute rounded-full bg-cyan-400 border-4 border-white shadow-[0_0_30px_rgba(34,211,238,1)] transition-all duration-75"
+          style={{
+            width: PLAYER_SIZE,
+            height: PLAYER_SIZE,
+            left: playerX,
+            top: playerY,
+          }}
+        />
 
-## Setting Permissions
+        <div
+          className="absolute transition-all duration-75"
+          style={{
+            width: MONSTER_SIZE,
+            height: MONSTER_SIZE,
+            left: monsterX,
+            top: monsterY,
+          }}
+        >
+          <div className="w-full h-full bg-red-700 rounded-full border-4 border-red-300 shadow-[0_0_35px_rgba(239,68,68,1)] flex items-center justify-center text-3xl">
+            👹
+          </div>
+        </div>
 
-In Android, permissions your app will need are defined in `AndroidManifest.xml` inside of the `<manifest>` tag, generally at the bottom of the file.
+        {(gameState === "start" || gameState === "won" || gameState === "lost") && (
+          <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center text-center backdrop-blur-sm">
+            <h2 className="text-4xl font-extrabold mb-4">{message}</h2>
+            <button
+              onClick={resetGame}
+              className="px-8 py-4 bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xl rounded-2xl shadow-xl transition-all hover:scale-105"
+            >
+              {gameState === "start" ? "Start Running" : "Play Again"}
+            </button>
+          </div>
+        )}
+      </div>
 
-For example, here's what adding Network permissions looks like:
+      <div className="mt-6 grid grid-cols-2 gap-4 text-center">
+        <div className="bg-slate-900 border border-slate-700 rounded-2xl p-4 w-72 shadow-lg">
+          <h3 className="font-bold text-xl mb-2">Goal</h3>
+          <p className="text-slate-300">Reach the safe den on the right side before the monster catches you.</p>
+        </div>
 
-```xml
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-package="com.getcapacitor.myapp">
-    <activity>
-      <!-- other stuff -->
-    </activity>
-
-    <!-- More stuff -->
-
-    <!-- Your permissions -->
-
-    <!-- Network API -->
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-</manifest>
-```
-
-Generally, the plugin you choose to use will ask you to set a permission. Add it in this file.
+        <div className="bg-slate-900 border border-slate-700 rounded-2xl p-4 w-72 shadow-lg">
+          <h3 className="font-bold text-xl mb-2">Controls</h3>
+          <p className="text-slate-300">Move with WASD or the Arrow Keys.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
